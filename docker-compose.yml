@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  comfy-mqtt:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MQTT_HOST=mqtt-broker
+      - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+    volumes:
+      - ./data:/usr/src/app/data
+      - ./logs:/usr/src/app/logs
+    depends_on:
+      - mqtt-broker
+    restart: unless-stopped
+    networks:
+      - comfy-mqtt-network
+
+  mqtt-broker:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+    networks:
+      - comfy-mqtt-network
+
+networks:
+  comfy-mqtt-network:
+    driver: bridge 
