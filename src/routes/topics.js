@@ -70,9 +70,9 @@ router.post('/', async (req, res) => {
 });
 
 // Get messages for a specific topic
-router.get('/:topicName/messages', async (req, res) => {
+router.get('/*/messages', async (req, res) => {
   try {
-    const { topicName } = req.params;
+    const topicName = req.params[0]; // Use params[0] for wildcard routes
     const limit = parseInt(req.query.limit) || 100;
     const offset = parseInt(req.query.offset) || 0;
 
@@ -94,7 +94,7 @@ router.get('/:topicName/messages', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error(`Error getting messages for topic ${req.params.topicName}:`, error);
+    logger.error(`Error getting messages for topic ${req.params[0]}:`, error);
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve messages'
@@ -103,9 +103,9 @@ router.get('/:topicName/messages', async (req, res) => {
 });
 
 // Publish message to a topic
-router.post('/:topicName/publish', async (req, res) => {
+router.post('/*/publish', async (req, res) => {
   try {
-    const { topicName } = req.params;
+    const topicName = req.params[0]; // Use params[0] for wildcard routes
     const { error, value } = messageSchema.validate(req.body);
     
     if (error) {
@@ -135,7 +135,7 @@ router.post('/:topicName/publish', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error(`Error publishing message to topic ${req.params.topicName}:`, error);
+    logger.error(`Error publishing message to topic ${req.params[0]}:`, error);
     
     if (error.message.includes('Payload validation failed')) {
       return res.status(400).json({
@@ -151,10 +151,44 @@ router.post('/:topicName/publish', async (req, res) => {
   }
 });
 
-// Delete a topic
-router.delete('/:topicName', async (req, res) => {
+// Get topic information (must come before the wildcard delete route)
+router.get('/*', async (req, res) => {
   try {
-    const { topicName } = req.params;
+    const topicName = req.params[0]; // Use params[0] for wildcard routes
+    const schema = await database.getTopicSchema(topicName);
+    
+    if (!schema) {
+      return res.status(404).json({
+        success: false,
+        error: `Topic ${topicName} not found`
+      });
+    }
+
+    const isSubscribed = mqttService.isTopicSubscribed(topicName);
+
+    res.json({
+      success: true,
+      data: {
+        name: topicName,
+        schema,
+        isSubscribed,
+        mqttConnected: mqttService.isConnected
+      }
+    });
+
+  } catch (error) {
+    logger.error(`Error getting topic info for ${req.params[0]}:`, error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve topic information'
+    });
+  }
+});
+
+// Delete a topic (must be last to avoid conflicts)
+router.delete('/*', async (req, res) => {
+  try {
+    const topicName = req.params[0]; // Use params[0] for wildcard routes
 
     // Check if topic exists
     const schema = await database.getTopicSchema(topicName);
@@ -180,44 +214,10 @@ router.delete('/:topicName', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error(`Error deleting topic ${req.params.topicName}:`, error);
+    logger.error(`Error deleting topic ${req.params[0]}:`, error);
     res.status(500).json({
       success: false,
       error: 'Failed to delete topic'
-    });
-  }
-});
-
-// Get topic information
-router.get('/:topicName', async (req, res) => {
-  try {
-    const { topicName } = req.params;
-    const schema = await database.getTopicSchema(topicName);
-    
-    if (!schema) {
-      return res.status(404).json({
-        success: false,
-        error: `Topic ${topicName} not found`
-      });
-    }
-
-    const isSubscribed = mqttService.isTopicSubscribed(topicName);
-
-    res.json({
-      success: true,
-      data: {
-        name: topicName,
-        schema,
-        isSubscribed,
-        mqttConnected: mqttService.isConnected
-      }
-    });
-
-  } catch (error) {
-    logger.error(`Error getting topic info for ${req.params.topicName}:`, error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve topic information'
     });
   }
 });

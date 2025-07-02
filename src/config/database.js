@@ -75,17 +75,11 @@ class InMemoryDatabase {
         this.messages.set(topicName, []);
       }
       
-      const messageId = Date.now() + Math.random();
-      const message = {
-        id: messageId,
-        payload: payload,
-        received_at: new Date().toISOString()
-      };
+      // Store payload directly without wrapper
+      this.messages.get(topicName).unshift(payload); // Add to beginning for newest first
       
-      this.messages.get(topicName).unshift(message); // Add to beginning for newest first
-      
-      logger.info(`Message stored for topic ${topicName} with ID ${messageId}`);
-      return messageId;
+      logger.info(`Message stored for topic ${topicName}`);
+      return this.messages.get(topicName).length;
     } catch (error) {
       logger.error(`Error storing message for topic ${topicName}:`, error);
       throw error;

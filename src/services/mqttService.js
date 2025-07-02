@@ -3,6 +3,41 @@ const Joi = require('joi');
 const logger = require('../config/logger');
 const database = require('../config/database');
 
+// Helper function to convert string-based schema to Joi schema
+function convertSchemaToJoi(schema) {
+  const joiSchema = {};
+  
+  for (const [key, value] of Object.entries(schema)) {
+    switch (value) {
+      case 'string':
+        joiSchema[key] = Joi.string();
+        break;
+      case 'number':
+        joiSchema[key] = Joi.number();
+        break;
+      case 'boolean':
+        joiSchema[key] = Joi.boolean();
+        break;
+      case 'array':
+        joiSchema[key] = Joi.array();
+        break;
+      case 'object':
+        joiSchema[key] = Joi.object();
+        break;
+      default:
+        // If it's already a Joi schema object, use it as is
+        if (value && typeof value === 'object' && value.isJoi) {
+          joiSchema[key] = value;
+        } else {
+          // Default to string if unknown type
+          joiSchema[key] = Joi.string();
+        }
+    }
+  }
+  
+  return joiSchema;
+}
+
 class MQTTService {
   constructor() {
     this.client = null;
@@ -108,7 +143,8 @@ class MQTTService {
     const schema = this.subscribedTopics.get(topicName);
     if (schema) {
       try {
-        const validationResult = Joi.object(schema).validate(payload);
+        const joiSchema = convertSchemaToJoi(schema);
+        const validationResult = Joi.object(joiSchema).validate(payload);
         if (validationResult.error) {
           logger.warn(`Payload validation failed for topic ${topicName}:`, validationResult.error.details);
           throw new Error(`Payload validation failed: ${validationResult.error.details[0].message}`);
@@ -142,7 +178,8 @@ class MQTTService {
 
       if (schema) {
         // Validate payload against schema
-        const validationResult = Joi.object(schema).validate(payload);
+        const joiSchema = convertSchemaToJoi(schema);
+        const validationResult = Joi.object(joiSchema).validate(payload);
         if (validationResult.error) {
           logger.warn(`Invalid payload received for topic ${topic}:`, validationResult.error.details);
           return;

@@ -146,6 +146,7 @@ async function startServer() {
     // Resubscribe to existing topics from database
     console.log('📡 Resubscribing to existing topics...');
     const topics = await database.getTopics();
+    console.log('Topics: ', topics);
     for (const topic of topics) {
       try {
         await mqttService.subscribeToTopic(topic.name, topic.schema);
