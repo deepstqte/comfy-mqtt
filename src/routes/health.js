@@ -16,14 +16,14 @@ router.get('/', async (req, res) => {
           subscribedTopics: mqttService.getSubscribedTopics().length
         },
         database: {
-          connected: true,
-          type: 'in-memory'
+          connected: database.pool !== null,
+          type: 'postgresql'
         }
       }
     };
 
     // Check if any critical service is down
-    if (!mqttService.isConnected) {
+    if (!mqttService.isConnected || !database.pool) {
       health.status = 'degraded';
     }
 
@@ -50,9 +50,10 @@ router.get('/status', async (req, res) => {
         clientId: mqttService.client ? mqttService.client.options.clientId : null
       },
       database: {
-        connected: true,
-        type: 'in-memory',
-        topicsCount: database.topics ? database.topics.size : 0
+        connected: database.pool !== null,
+        type: 'postgresql',
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432
       }
     };
 

@@ -1,126 +1,148 @@
+const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 const logger = require('./logger');
 
-class InMemoryDatabase {
+class PostgreSQLDatabase {
   constructor() {
-    this.topics = new Map();
-    this.messages = new Map();
-    this.topicCounter = 0;
+    this.pool = null;
   }
 
   async initialize() {
     try {
-      logger.info('In-memory database initialized successfully');
+      this.pool = new Pool({
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT) || 5432,
+        database: process.env.DB_NAME || 'comfy_mqtt',
+        user: process.env.DB_USER || 'comfy_mqtt',
+        password: process.env.DB_PASSWORD || 'comfy_mqtt_password',
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      });
+
+      // Test the connection
+      const client = await this.pool.connect();
+      client.release();
+      
+      await this.createTables();
+      logger.info('PostgreSQL database initialized successfully');
     } catch (error) {
-      logger.error('Error initializing in-memory database:', error);
+      logger.error('Error initializing PostgreSQL database:', error);
       throw error;
     }
   }
 
   async createTables() {
-    // No-op for in-memory database
-    logger.info('In-memory database tables ready');
-  }
-
-  async createTopicTable(topicName) {
-    // Initialize message storage for this topic
-    if (!this.messages.has(topicName)) {
-      this.messages.set(topicName, []);
+    const client = await this.pool.connect();
+    try {
+      // Read and execute the schema SQL file
+      const schemaPath = path.join(__dirname, '../../database/schema.sql');
+      const schemaSQL = fs.readFileSync(schemaPath, 'utf8');
+      
+      // Execute the schema SQL
+      await client.query(schemaSQL);
+      
+      logger.info('PostgreSQL database schema applied successfully');
+    } catch (error) {
+      logger.error('Error applying database schema:', error);
+      throw error;
+    } finally {
+      client.release();
     }
-    logger.info(`Message storage ready for topic ${topicName}`);
-    return topicName;
   }
 
   async addTopic(topicName, schema) {
+    const client = await this.pool.connect();
     try {
-      this.topicCounter++;
-      this.topics.set(topicName, {
-        id: this.topicCounter,
-        name: topicName,
-        schema: schema,
-        created_at: new Date().toISOString()
-      });
+      await client.query(
+        'INSERT INTO topics (name, schema) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET schema = $2',
+        [topicName, JSON.stringify(schema)]
+      );
       
-      await this.createTopicTable(topicName);
       logger.info(`Topic ${topicName} added successfully`);
-    } catch (error) {
-      logger.error('Error adding topic:', error);
-      throw error;
+    } finally {
+      client.release();
     }
   }
 
   async getTopics() {
+    const client = await this.pool.connect();
     try {
-      return Array.from(this.topics.values()).sort((a, b) => 
-        new Date(b.created_at) - new Date(a.created_at)
+      const result = await client.query(
+        'SELECT * FROM topics ORDER BY created_at DESC'
       );
-    } catch (error) {
-      logger.error('Error getting topics:', error);
-      throw error;
+      
+      return result.rows.map(row => ({
+        ...row,
+        schema: row.schema
+      }));
+    } finally {
+      client.release();
     }
   }
 
   async getTopicSchema(topicName) {
+    const client = await this.pool.connect();
     try {
-      const topic = this.topics.get(topicName);
-      return topic ? topic.schema : null;
-    } catch (error) {
-      logger.error('Error getting topic schema:', error);
-      throw error;
+      const result = await client.query(
+        'SELECT schema FROM topics WHERE name = $1',
+        [topicName]
+      );
+      
+      return result.rows.length > 0 ? result.rows[0].schema : null;
+    } finally {
+      client.release();
     }
   }
 
   async storeMessage(topicName, payload) {
+    const client = await this.pool.connect();
     try {
-      if (!this.messages.has(topicName)) {
-        this.messages.set(topicName, []);
-      }
+      const result = await client.query(
+        'INSERT INTO messages (topic_name, payload) VALUES ($1, $2) RETURNING id',
+        [topicName, JSON.stringify(payload)]
+      );
       
-      // Store payload directly without wrapper
-      this.messages.get(topicName).unshift(payload); // Add to beginning for newest first
-      
-      logger.info(`Message stored for topic ${topicName}`);
-      return this.messages.get(topicName).length;
-    } catch (error) {
-      logger.error(`Error storing message for topic ${topicName}:`, error);
-      throw error;
+      logger.info(`Message stored for topic ${topicName} with ID ${result.rows[0].id}`);
+      return result.rows[0].id;
+    } finally {
+      client.release();
     }
   }
 
   async getMessages(topicName, limit = 100, offset = 0) {
+    const client = await this.pool.connect();
     try {
-      const messages = this.messages.get(topicName) || [];
-      return messages.slice(offset, offset + limit);
-    } catch (error) {
-      logger.error(`Error getting messages for topic ${topicName}:`, error);
-      throw error;
+      const result = await client.query(
+        'SELECT payload FROM messages WHERE topic_name = $1 ORDER BY received_at DESC LIMIT $2 OFFSET $3',
+        [topicName, limit, offset]
+      );
+      
+      return result.rows.map(row => row.payload);
+    } finally {
+      client.release();
     }
   }
 
   async deleteTopic(topicName) {
+    const client = await this.pool.connect();
     try {
-      // Delete topic
-      this.topics.delete(topicName);
-      
-      // Delete messages
-      this.messages.delete(topicName);
+      // Delete topic (messages will be deleted automatically due to CASCADE)
+      await client.query('DELETE FROM topics WHERE name = $1', [topicName]);
       
       logger.info(`Topic ${topicName} and its messages deleted successfully`);
-    } catch (error) {
-      logger.error('Error deleting topic:', error);
-      throw error;
+    } finally {
+      client.release();
     }
   }
 
   close() {
-    try {
-      // Clear in-memory data
-      this.topics.clear();
-      this.messages.clear();
-      logger.info('In-memory database cleared');
-    } catch (error) {
-      logger.error('Error closing in-memory database:', error);
+    if (this.pool) {
+      this.pool.end();
+      logger.info('PostgreSQL database connection closed');
     }
   }
 }
 
-module.exports = new InMemoryDatabase(); 
+module.exports = new PostgreSQLDatabase(); 

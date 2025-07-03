@@ -302,19 +302,35 @@ The service uses Joi for payload validation. When you configure a topic, you spe
 
 ## Database Structure
 
-The service uses SQLite with the following structure:
+The service uses PostgreSQL with the following structure:
+
+### Tables
 
 - `topics` table: Stores topic configurations and schemas
-- `topic_<topic_name>` tables: One table per topic for storing messages
+- `messages` table: Stores all MQTT messages with topic references
 
-Each topic table has the following structure:
+### Schema
+
 ```sql
-CREATE TABLE topic_<topic_name> (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  payload TEXT NOT NULL,
-  received_at DATETIME DEFAULT CURRENT_TIMESTAMP
+-- Topics table
+CREATE TABLE topics (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) UNIQUE NOT NULL,
+  schema JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Messages table
+CREATE TABLE messages (
+  id SERIAL PRIMARY KEY,
+  topic_name VARCHAR(255) NOT NULL,
+  payload JSONB NOT NULL,
+  received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (topic_name) REFERENCES topics(name) ON DELETE CASCADE
 );
 ```
+
+The complete schema is defined in `database/schema.sql` and is automatically applied when the application starts.
 
 ## Logging
 

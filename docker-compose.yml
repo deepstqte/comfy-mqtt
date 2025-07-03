@@ -11,11 +11,17 @@ services:
       - MQTT_PORT=1883
       - MQTT_USERNAME=${MQTT_USERNAME:-}
       - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=comfy_mqtt
+      - DB_USER=comfy_mqtt
+      - DB_PASSWORD=${DB_PASSWORD:-comfy_mqtt_password}
     volumes:
       - ./data:/usr/src/app/data
       - ./logs:/usr/src/app/logs
     depends_on:
       - mqtt-broker
+      - postgres
     restart: unless-stopped
     networks:
       - comfy-mqtt-network
@@ -32,6 +38,23 @@ services:
     restart: unless-stopped
     networks:
       - comfy-mqtt-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=comfy_mqtt
+      - POSTGRES_USER=comfy_mqtt
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-comfy_mqtt_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - comfy-mqtt-network
+
+volumes:
+  postgres_data:
 
 networks:
   comfy-mqtt-network:
