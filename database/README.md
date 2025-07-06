@@ -10,6 +10,8 @@ This directory contains the database schema and initialization scripts for the C
 
 ## Database Schema
 
+The application uses a configurable table architecture that supports both shared and dedicated tables.
+
 ### Tables
 
 #### `topics`
@@ -20,10 +22,11 @@ Stores MQTT topic configurations and their validation schemas.
 | `id` | SERIAL | Primary key |
 | `name` | VARCHAR(255) | Unique topic name |
 | `schema` | JSONB | Joi validation schema for the topic |
+| `use_dedicated_table` | BOOLEAN | Whether this topic uses a dedicated table |
 | `created_at` | TIMESTAMP | When the topic was created |
 
 #### `messages`
-Stores MQTT messages received for each topic.
+Shared table for topics that don't use dedicated tables.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -32,14 +35,47 @@ Stores MQTT messages received for each topic.
 | `payload` | JSONB | The actual message payload |
 | `received_at` | TIMESTAMP | When the message was received |
 
+#### Individual Topic Tables
+Optional dedicated tables for specific topics with schema-based columns.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL | Primary key |
+| `{field_name}` | Various | Individual columns for each schema field |
+| `received_at` | TIMESTAMP | When the message was received |
+
+**Example:** For schema `{"temperature": "number", "humidity": "number"}`:
+- `temperature` column (NUMERIC)
+- `humidity` column (NUMERIC)
+
+### Table Naming Convention
+
+Dedicated topic tables follow the naming pattern: `topic_<sanitized_topic_name>`
+
+Examples:
+- Topic `sensor/temperature` → Table `topic_sensor_temperature`
+- Topic `home/living-room/thermostat` → Table `topic_home_living_room_thermostat`
+
+### Architecture Benefits
+
+**Shared Tables (Default):**
+- Simpler database structure
+- Easier to manage
+- Good for low-volume topics
+
+**Dedicated Tables:**
+- Better isolation: Each topic's data is completely separate
+- Improved performance: No need to filter by topic_name
+- Structured storage: Individual columns for each schema field
+- Better query performance: Can index and query specific fields
+- Automatic cleanup: When a topic is deleted, its entire table is dropped
+- Scalability: Each topic can scale independently
+
 ### Indexes
 
-- `idx_messages_topic_received` - Optimizes queries for messages by topic and timestamp
 - `idx_topics_name` - Optimizes topic name lookups
-
-### Foreign Keys
-
-- `messages.topic_name` → `topics.name` (CASCADE DELETE)
+- `idx_messages_topic_received` - Optimizes queries for shared messages
+- Individual topic tables get their own indexes for `received_at DESC`
 
 ## Automatic Setup
 

@@ -9,7 +9,8 @@ const router = express.Router();
 // Validation schemas
 const topicSchema = Joi.object({
   name: Joi.string().required().min(1).max(255),
-  schema: Joi.object().required()
+  schema: Joi.object().required(),
+  useDedicatedTable: Joi.boolean().default(false)
 });
 
 const messageSchema = Joi.object({
@@ -45,10 +46,10 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { name, schema } = value;
+    const { name, schema, useDedicatedTable } = value;
 
     // Add topic to database
-    await database.addTopic(name, schema);
+    await database.addTopic(name, schema, useDedicatedTable);
 
     // Subscribe to MQTT topic
     await mqttService.subscribeToTopic(name, schema);
@@ -57,7 +58,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({
       success: true,
       message: `Topic ${name} configured successfully`,
-      data: { name, schema }
+      data: { name, schema, useDedicatedTable }
     });
 
   } catch (error) {
@@ -155,9 +156,9 @@ router.post('/*/publish', async (req, res) => {
 router.get('/*', async (req, res) => {
   try {
     const topicName = req.params[0]; // Use params[0] for wildcard routes
-    const schema = await database.getTopicSchema(topicName);
+    const topic = await database.getTopic(topicName);
     
-    if (!schema) {
+    if (!topic) {
       return res.status(404).json({
         success: false,
         error: `Topic ${topicName} not found`
@@ -170,7 +171,8 @@ router.get('/*', async (req, res) => {
       success: true,
       data: {
         name: topicName,
-        schema,
+        schema: topic.schema,
+        useDedicatedTable: topic.use_dedicated_table,
         isSubscribed,
         mqttConnected: mqttService.isConnected
       }

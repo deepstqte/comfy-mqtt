@@ -102,9 +102,15 @@ Content-Type: application/json
     "temperature": "number",
     "humidity": "number",
     "timestamp": "string"
-  }
+  },
+  "useDedicatedTable": false
 }
 ```
+
+**Parameters:**
+- `name` (required): MQTT topic name
+- `schema` (required): Joi validation schema for the topic
+- `useDedicatedTable` (optional): Whether to create a dedicated table for this topic (default: false)
 
 Response:
 ```json
@@ -117,7 +123,8 @@ Response:
       "temperature": "number",
       "humidity": "number",
       "timestamp": "string"
-    }
+    },
+    "useDedicatedTable": false
   }
 }
 ```
@@ -193,6 +200,7 @@ Response:
       "humidity": "number",
       "timestamp": "string"
     },
+    "useDedicatedTable": false,
     "isSubscribed": true,
     "mqttConnected": true
   }
@@ -302,12 +310,43 @@ The service uses Joi for payload validation. When you configure a topic, you spe
 
 ## Database Structure
 
-The service uses PostgreSQL with the following structure:
+The service uses PostgreSQL with a configurable table architecture that supports both shared and dedicated tables.
 
 ### Tables
 
 - `topics` table: Stores topic configurations and schemas
-- `messages` table: Stores all MQTT messages with topic references
+- `messages` table: Shared table for topics that don't use dedicated tables
+- Individual topic tables: Optional dedicated tables for specific topics
+
+### Architecture
+
+The system supports two table strategies:
+
+#### 1. Shared Table (Default)
+- All messages stored in the `messages` table
+- Good for topics with low message volume
+- Simpler database structure
+- Use by setting `useDedicatedTable: false` (or omitting the parameter)
+
+#### 2. Dedicated Tables
+- Each topic gets its own table with individual columns for each schema field
+- Table naming convention: `topic_<sanitized_topic_name>`
+- Example: Topic `sensor/temperature` with schema `{"temperature": "number", "humidity": "number"}` → Table `topic_sensor_temperature` with columns `temperature NUMERIC, humidity NUMERIC`
+- Better for high-volume topics, complex queries, or when you need structured data storage
+
+### Benefits
+
+**Shared Tables:**
+- Simpler database structure
+- Easier to manage
+- Good for low-volume topics
+
+**Dedicated Tables:**
+- Better isolation: Each topic's data is completely separate
+- Improved performance: No need to filter by topic_name
+- Structured storage: Individual columns for each schema field
+- Better query performance: Can index and query specific fields
+- Automatic cleanup: When a topic is deleted, its entire table is dropped
 
 ### Schema
 
@@ -317,10 +356,11 @@ CREATE TABLE topics (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) UNIQUE NOT NULL,
   schema JSONB NOT NULL,
+  use_dedicated_table BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Messages table
+-- Generic messages table for shared topics
 CREATE TABLE messages (
   id SERIAL PRIMARY KEY,
   topic_name VARCHAR(255) NOT NULL,
@@ -328,9 +368,38 @@ CREATE TABLE messages (
   received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (topic_name) REFERENCES topics(name) ON DELETE CASCADE
 );
+
+-- Individual topic tables (created dynamically when use_dedicated_table=true)
+-- Columns are created based on the schema definition
+CREATE TABLE topic_<sanitized_name> (
+  id SERIAL PRIMARY KEY,
+  -- Individual columns for each schema field
+  -- Example: temperature NUMERIC, humidity NUMERIC, timestamp TEXT
+  received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-The complete schema is defined in `database/schema.sql` and is automatically applied when the application starts.
+The complete schema is defined in `database/schema.sql` and is automatically applied when the application starts. Topic tables are created automatically when topics are configured with `useDedicatedTable: true`.
+
+### Type Mapping for Dedicated Tables
+
+When creating dedicated tables, schema field types are mapped to PostgreSQL types:
+
+| Joi Type | PostgreSQL Type | Description |
+|----------|----------------|-------------|
+| `"number"` | `NUMERIC` | Numeric values |
+| `"integer"` | `NUMERIC` | Integer values |
+| `"boolean"` | `BOOLEAN` | Boolean values |
+| `"string"` | `TEXT` | Text values |
+| `"date"` | `TIMESTAMP` | Date/time values |
+| `"timestamp"` | `TIMESTAMP` | Date/time values |
+| `"array"` | `JSONB` | Array values |
+| `"object"` | `JSONB` | Object values |
+
+**Example:** Schema `{"temperature": "number", "location": "object", "active": "boolean"}` creates columns:
+- `temperature NUMERIC`
+- `location JSONB`
+- `active BOOLEAN`
 
 ## Logging
 
