@@ -140,18 +140,36 @@ Response:
   "success": true,
   "data": [
     {
-      "id": 1,
-      "payload": {
-        "temperature": 25.5,
-        "humidity": 60.2,
-        "timestamp": "2024-01-01T12:00:00.000Z"
-      },
-      "received_at": "2024-01-01T12:00:00.000Z"
+      "temperature": 25.5,
+      "humidity": 60.2,
+      "timestamp": "2024-01-01T12:00:00.000Z"
     }
   ],
   "count": 1,
   "topic": "sensor/temperature"
 }
+```
+
+#### Download messages as CSV
+```http
+GET /api/topics/sensor/temperature/messages?format=csv&limit=100
+```
+
+This will download a CSV file with the following columns:
+- `id`: Database record ID
+- `received_at`: Timestamp when message was received
+- Schema fields: Individual columns for each field in the topic schema
+
+**Query Parameters:**
+- `format`: `json` (default) or `csv`
+- `limit`: Number of records to retrieve (default: 100)
+- `offset`: Number of records to skip (default: 0)
+
+**Example CSV Output:**
+```csv
+id,received_at,temperature,humidity,timestamp
+1,2024-01-01T12:00:00.000Z,25.5,60.2,2024-01-01T12:00:00.000Z
+2,2024-01-01T12:05:00.000Z,26.0,58.5,2024-01-01T12:05:00.000Z
 ```
 
 #### Publish message to a topic

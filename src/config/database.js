@@ -333,7 +333,7 @@ class PostgreSQLDatabase {
     }
   }
 
-  async getMessages(topicName, limit = 100, offset = 0) {
+  async getMessages(topicName, limit = 100, offset = 0, includeMetadata = false) {
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -367,14 +367,24 @@ class PostgreSQLDatabase {
           fieldName.replace(/[^a-zA-Z0-9_]/g, '_')
         );
         
+        const selectColumns = includeMetadata 
+          ? `id, received_at, ${columns.join(', ')}`
+          : columns.join(', ');
+        
         const result = await client.query(
-          `SELECT ${columns.join(', ')} FROM ${tableName} ORDER BY received_at DESC LIMIT $1 OFFSET $2`,
+          `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at DESC LIMIT $1 OFFSET $2`,
           [limit, offset]
         );
         
         // Reconstruct payload from columns
         return result.rows.map(row => {
           const payload = {};
+          
+          if (includeMetadata) {
+            payload._id = row.id;
+            payload._received_at = row.received_at;
+          }
+          
           for (const [fieldName, fieldType] of Object.entries(schema)) {
             const columnName = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
             let value = row[columnName];
@@ -398,12 +408,20 @@ class PostgreSQLDatabase {
         });
       } else {
         // Use generic messages table
+        const selectColumns = includeMetadata ? 'id, received_at, payload' : 'payload';
         const result = await client.query(
-          'SELECT payload FROM messages WHERE topic_name = $1 ORDER BY received_at DESC LIMIT $2 OFFSET $3',
+          `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at DESC LIMIT $2 OFFSET $3`,
           [topicName, limit, offset]
         );
         
-        return result.rows.map(row => row.payload);
+        return result.rows.map(row => {
+          const payload = row.payload;
+          if (includeMetadata) {
+            payload._id = row.id;
+            payload._received_at = row.received_at;
+          }
+          return payload;
+        });
       }
     } catch (error) {
       if (error.code === '42P01') { // Table doesn't exist

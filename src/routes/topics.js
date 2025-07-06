@@ -76,23 +76,56 @@ router.get('/*/messages', async (req, res) => {
     const topicName = req.params[0]; // Use params[0] for wildcard routes
     const limit = parseInt(req.query.limit) || 100;
     const offset = parseInt(req.query.offset) || 0;
+    const format = req.query.format || 'json'; // 'json' or 'csv'
 
     // Check if topic exists
-    const schema = await database.getTopicSchema(topicName);
-    if (!schema) {
+    const topic = await database.getTopic(topicName);
+    if (!topic) {
       return res.status(404).json({
         success: false,
         error: `Topic ${topicName} not found`
       });
     }
 
-    const messages = await database.getMessages(topicName, limit, offset);
-    res.json({
-      success: true,
-      data: messages,
-      count: messages.length,
-      topic: topicName
-    });
+    const messages = await database.getMessages(topicName, limit, offset, format === 'csv');
+    
+    if (format === 'csv') {
+      try {
+        console.log('CSV request for topic:', topicName);
+        console.log('Topic data:', topic);
+        console.log('Messages count:', messages.length);
+        
+        // Generate CSV
+        const csv = generateCSV(messages, topic.schema, topic.use_dedicated_table);
+        
+        console.log('CSV generated, length:', csv.length);
+        
+        // Set headers for CSV download
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${topicName.replace(/[^a-zA-Z0-9]/g, '_')}_messages.csv"`);
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        // Send CSV response
+        res.send(csv);
+        console.log('CSV response sent');
+        return; // Important: return here to prevent JSON response
+      } catch (csvError) {
+        console.error('CSV generation error:', csvError);
+        logger.error(`Error generating CSV for topic ${topicName}:`, csvError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to generate CSV'
+        });
+      }
+    } else {
+      // Return JSON response
+      res.json({
+        success: true,
+        data: messages,
+        count: messages.length,
+        topic: topicName
+      });
+    }
 
   } catch (error) {
     logger.error(`Error getting messages for topic ${req.params[0]}:`, error);
@@ -102,6 +135,65 @@ router.get('/*/messages', async (req, res) => {
     });
   }
 });
+
+// Helper function to generate CSV from messages
+function generateCSV(messages, schema, useDedicatedTable) {
+  console.log('Generating CSV with:', { messagesCount: messages.length, schema, useDedicatedTable });
+  
+  if (messages.length === 0) {
+    console.log('No messages found, returning empty CSV');
+    return '';
+  }
+
+  // Get field names from schema
+  const fieldNames = Object.keys(schema);
+  console.log('Field names:', fieldNames);
+  
+  // Create CSV header
+  const headers = ['id', 'received_at', ...fieldNames];
+  let csv = headers.join(',') + '\n';
+
+  // Add data rows
+  messages.forEach((message, index) => {
+    console.log(`Processing message ${index}:`, message);
+    const row = [];
+    
+    // Add id (from metadata)
+    row.push(message._id || 'N/A');
+    
+    // Add received_at (from metadata)
+    const receivedAt = message._received_at || new Date().toISOString();
+    row.push(receivedAt);
+    
+    // Add message fields
+    fieldNames.forEach(fieldName => {
+      const value = message[fieldName];
+      let csvValue = '';
+      
+      if (value !== null && value !== undefined) {
+        if (typeof value === 'object') {
+          // Handle objects and arrays
+          csvValue = JSON.stringify(value);
+        } else {
+          // Handle primitive values
+          csvValue = String(value);
+        }
+        
+        // Escape quotes and wrap in quotes if contains comma, quote, or newline
+        if (csvValue.includes(',') || csvValue.includes('"') || csvValue.includes('\n')) {
+          csvValue = '"' + csvValue.replace(/"/g, '""') + '"';
+        }
+      }
+      
+      row.push(csvValue);
+    });
+    
+    csv += row.join(',') + '\n';
+  });
+
+  console.log('Generated CSV preview:', csv.substring(0, 200) + '...');
+  return csv;
+}
 
 // Publish message to a topic
 router.post('/*/publish', async (req, res) => {
