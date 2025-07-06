@@ -136,18 +136,13 @@ GET /api/topics/sensor/temperature/messages?limit=10&offset=0
 
 Response:
 ```json
-{
-  "success": true,
-  "data": [
-    {
-      "temperature": 25.5,
-      "humidity": 60.2,
-      "timestamp": "2024-01-01T12:00:00.000Z"
-    }
-  ],
-  "count": 1,
-  "topic": "sensor/temperature"
-}
+[
+  {
+    "temperature": 25.5,
+    "humidity": 60.2,
+    "timestamp": "2024-01-01T12:00:00.000Z"
+  }
+]
 ```
 
 **Note:** Messages are returned in chronological order by default (oldest first). Use `order=desc` to get newest first.
@@ -159,13 +154,19 @@ GET /api/topics/sensor/temperature/messages?format=csv&limit=100
 
 **Ordering Examples:**
 ```http
-# Oldest first (default)
-GET /api/topics/sensor/temperature/messages?order=asc
+# All records, oldest first (default)
+GET /api/topics/sensor/temperature/messages
 
-# Newest first
+# All records, newest first
 GET /api/topics/sensor/temperature/messages?order=desc
 
-# CSV with newest first
+# First 50 records, oldest first
+GET /api/topics/sensor/temperature/messages?limit=50
+
+# First 50 records, newest first
+GET /api/topics/sensor/temperature/messages?limit=50&order=desc
+
+# CSV with all records, newest first
 GET /api/topics/sensor/temperature/messages?format=csv&order=desc
 ```
 
@@ -176,7 +177,7 @@ This will download a CSV file with the following columns:
 
 **Query Parameters:**
 - `format`: `json` (default) or `csv`
-- `limit`: Number of records to retrieve (default: 100)
+- `limit`: Number of records to retrieve (optional - if not specified, returns all records)
 - `offset`: Number of records to skip (default: 0)
 - `order`: `asc` (default) or `desc` - chronological ordering
 

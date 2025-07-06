@@ -333,7 +333,7 @@ class PostgreSQLDatabase {
     }
   }
 
-  async getMessages(topicName, limit = 100, offset = 0, includeMetadata = false, order = 'asc') {
+  async getMessages(topicName, limit = null, offset = 0, includeMetadata = false, order = 'asc') {
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -371,10 +371,18 @@ class PostgreSQLDatabase {
           ? `id, received_at, ${columns.join(', ')}`
           : columns.join(', ');
         
-        const result = await client.query(
-          `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at ${order.toUpperCase()} LIMIT $1 OFFSET $2`,
-          [limit, offset]
-        );
+        let query = `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at ${order.toUpperCase()}`;
+        let params = [];
+        
+        if (limit) {
+          query += ` LIMIT $1 OFFSET $2`;
+          params = [limit, offset];
+        } else {
+          query += ` OFFSET $1`;
+          params = [offset];
+        }
+        
+        const result = await client.query(query, params);
         
         // Reconstruct payload from columns
         return result.rows.map(row => {
@@ -409,10 +417,18 @@ class PostgreSQLDatabase {
       } else {
         // Use generic messages table
         const selectColumns = includeMetadata ? 'id, received_at, payload' : 'payload';
-        const result = await client.query(
-          `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at ${order.toUpperCase()} LIMIT $2 OFFSET $3`,
-          [topicName, limit, offset]
-        );
+        let query = `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at ${order.toUpperCase()}`;
+        let params = [topicName];
+        
+        if (limit) {
+          query += ` LIMIT $2 OFFSET $3`;
+          params.push(limit, offset);
+        } else {
+          query += ` OFFSET $2`;
+          params.push(offset);
+        }
+        
+        const result = await client.query(query, params);
         
         return result.rows.map(row => {
           const payload = row.payload;

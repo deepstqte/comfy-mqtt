@@ -74,7 +74,7 @@ router.post('/', async (req, res) => {
 router.get('/*/messages', async (req, res) => {
   try {
     const topicName = req.params[0]; // Use params[0] for wildcard routes
-    const limit = parseInt(req.query.limit) || 100;
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
     const offset = parseInt(req.query.offset) || 0;
     const format = req.query.format || 'json'; // 'json' or 'csv'
     const order = req.query.order || 'asc'; // 'asc' or 'desc'
@@ -127,13 +127,8 @@ router.get('/*/messages', async (req, res) => {
         });
       }
     } else {
-      // Return JSON response
-      res.json({
-        success: true,
-        data: messages,
-        count: messages.length,
-        topic: topicName
-      });
+      // Return JSON response - just the data array
+      res.json(messages);
     }
 
   } catch (error) {
