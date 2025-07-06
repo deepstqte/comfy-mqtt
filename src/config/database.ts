@@ -1,27 +1,26 @@
-const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
-const logger = require('./logger');
+import { Pool } from 'pg';
+import fs from 'fs';
+import path from 'path';
+import { logger } from './logger';
+import { Topic, MessageWithMetadata, DatabaseService } from '../types';
 
 // Helper function to get sanitized table name for a topic
-function getTopicTableName(topicName) {
+function getTopicTableName(topicName: string): string {
   const sanitizedTopicName = topicName.replace(/[^a-zA-Z0-9]/g, '_');
   return `topic_${sanitizedTopicName}`;
 }
 
-class PostgreSQLDatabase {
-  constructor() {
-    this.pool = null;
-  }
+class PostgreSQLDatabase implements DatabaseService {
+  private pool: Pool | null = null;
 
-  async initialize() {
+  async initialize(): Promise<void> {
     try {
       this.pool = new Pool({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 5432,
-        database: process.env.DB_NAME || 'comfy_mqtt',
-        user: process.env.DB_USER || 'comfy_mqtt',
-        password: process.env.DB_PASSWORD || 'comfy_mqtt_password',
+        host: process.env['DB_HOST'] || 'localhost',
+        port: parseInt(process.env['DB_PORT'] || '5432'),
+        database: process.env['DB_NAME'] || 'comfy_mqtt',
+        user: process.env['DB_USER'] || 'comfy_mqtt',
+        password: process.env['DB_PASSWORD'] || 'comfy_mqtt_password',
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 2000,
@@ -39,7 +38,9 @@ class PostgreSQLDatabase {
     }
   }
 
-  async createTables() {
+  async createTables(): Promise<void> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       // Read and execute the schema SQL file
@@ -58,7 +59,9 @@ class PostgreSQLDatabase {
     }
   }
 
-  async addTopic(topicName, schema, useDedicatedTable = false) {
+  async addTopic(topicName: string, schema: Record<string, any>, useDedicatedTable: boolean = false): Promise<void> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       // Insert topic into topics table
@@ -78,7 +81,9 @@ class PostgreSQLDatabase {
     }
   }
 
-  async createTopicTable(topicName) {
+  async createTopicTable(topicName: string): Promise<string> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       const tableName = getTopicTableName(topicName);
@@ -118,12 +123,12 @@ class PostgreSQLDatabase {
     }
   }
 
-  generateColumnsFromSchema(schema) {
-    const columns = [];
+  generateColumnsFromSchema(schema: Record<string, any>): string[] {
+    const columns: string[] = [];
     
     for (const [fieldName, fieldType] of Object.entries(schema)) {
       // Sanitize field name for column name
-      const columnName = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+      const columnName = fieldName.replace(/[^a-zA-Z0-9]/g, '_');
       
       // Map Joi types to PostgreSQL types
       let pgType = 'TEXT'; // default
@@ -161,53 +166,9 @@ class PostgreSQLDatabase {
     return columns;
   }
 
-  mapPayloadToColumns(payload, schema) {
-    const columns = [];
-    const values = [];
+  async getTopics(): Promise<Topic[]> {
+    if (!this.pool) throw new Error('Database not initialized');
     
-    for (const [fieldName, fieldType] of Object.entries(schema)) {
-      // Sanitize field name for column name
-      const columnName = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
-      columns.push(columnName);
-      
-      // Get the value from payload
-      const value = payload[fieldName];
-      
-      // Convert value based on field type
-      let convertedValue = value;
-      
-      if (typeof fieldType === 'string') {
-        switch (fieldType.toLowerCase()) {
-          case 'number':
-          case 'integer':
-            convertedValue = value !== null && value !== undefined ? parseFloat(value) : null;
-            break;
-          case 'boolean':
-            convertedValue = value !== null && value !== undefined ? Boolean(value) : null;
-            break;
-          case 'date':
-          case 'timestamp':
-            convertedValue = value !== null && value !== undefined ? new Date(value) : null;
-            break;
-          case 'array':
-          case 'object':
-            convertedValue = value !== null && value !== undefined ? JSON.stringify(value) : null;
-            break;
-          default:
-            convertedValue = value !== null && value !== undefined ? String(value) : null;
-        }
-      } else if (typeof fieldType === 'object') {
-        // Handle nested objects or arrays
-        convertedValue = value !== null && value !== undefined ? JSON.stringify(value) : null;
-      }
-      
-      values.push(convertedValue);
-    }
-    
-    return { columns, values };
-  }
-
-  async getTopics() {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
@@ -223,21 +184,9 @@ class PostgreSQLDatabase {
     }
   }
 
-  async getTopicSchema(topicName) {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(
-        'SELECT schema FROM topics WHERE name = $1',
-        [topicName]
-      );
-      
-      return result.rows.length > 0 ? result.rows[0].schema : null;
-    } finally {
-      client.release();
-    }
-  }
-
-  async getTopic(topicName) {
+  async getTopic(topicName: string): Promise<Topic | null> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       const result = await client.query(
@@ -251,7 +200,25 @@ class PostgreSQLDatabase {
     }
   }
 
-  async storeMessage(topicName, payload) {
+  async getTopicSchema(topicName: string): Promise<Record<string, any> | null> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT schema FROM topics WHERE name = $1',
+        [topicName]
+      );
+      
+      return result.rows.length > 0 ? result.rows[0].schema : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async storeMessage(topicName: string, payload: Record<string, any>): Promise<number> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -301,7 +268,7 @@ class PostgreSQLDatabase {
         return result.rows[0].id;
       }
     } catch (error) {
-      if (error.code === '42P01') { // Table doesn't exist
+      if (error instanceof Error && 'code' in error && error.code === '42P01') { // Table doesn't exist
         logger.warn(`Dedicated table doesn't exist for topic ${topicName}, creating it now`);
         await this.createTopicTable(topicName);
         
@@ -333,7 +300,55 @@ class PostgreSQLDatabase {
     }
   }
 
-  async getMessages(topicName, limit = null, offset = 0, includeMetadata = false, order = 'asc') {
+  mapPayloadToColumns(payload: Record<string, any>, schema: Record<string, any>): { columns: string[], values: any[] } {
+    const columns: string[] = [];
+    const values: any[] = [];
+    
+    for (const [fieldName, fieldType] of Object.entries(schema)) {
+      // Sanitize field name for column name
+      const columnName = fieldName.replace(/[^a-zA-Z0-9]/g, '_');
+      columns.push(columnName);
+      
+      // Get the value from payload
+      const value = payload[fieldName];
+      
+      // Convert value based on field type
+      let convertedValue = value;
+      
+      if (typeof fieldType === 'string') {
+        switch (fieldType.toLowerCase()) {
+          case 'number':
+          case 'integer':
+            convertedValue = value !== null && value !== undefined ? parseFloat(value) : null;
+            break;
+          case 'boolean':
+            convertedValue = value !== null && value !== undefined ? Boolean(value) : null;
+            break;
+          case 'date':
+          case 'timestamp':
+            convertedValue = value !== null && value !== undefined ? new Date(value) : null;
+            break;
+          case 'array':
+          case 'object':
+            convertedValue = value !== null && value !== undefined ? JSON.stringify(value) : null;
+            break;
+          default:
+            convertedValue = value !== null && value !== undefined ? String(value) : null;
+        }
+      } else if (typeof fieldType === 'object') {
+        // Handle nested objects or arrays
+        convertedValue = value !== null && value !== undefined ? JSON.stringify(value) : null;
+      }
+      
+      values.push(convertedValue);
+    }
+    
+    return { columns, values };
+  }
+
+  async getMessages(topicName: string, limit: number | null = null, offset: number = 0, includeMetadata: boolean = false, order: 'asc' | 'desc' = 'asc'): Promise<MessageWithMetadata[]> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -364,7 +379,7 @@ class PostgreSQLDatabase {
         
         const schema = schemaResult.rows[0].schema;
         const columns = Object.keys(schema).map(fieldName => 
-          fieldName.replace(/[^a-zA-Z0-9_]/g, '_')
+          fieldName.replace(/[^a-zA-Z0-9]/g, '_')
         );
         
         const selectColumns = includeMetadata 
@@ -372,7 +387,7 @@ class PostgreSQLDatabase {
           : columns.join(', ');
         
         let query = `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at ${order.toUpperCase()}`;
-        let params = [];
+        let params: any[] = [];
         
         if (limit) {
           query += ` LIMIT $1 OFFSET $2`;
@@ -386,7 +401,7 @@ class PostgreSQLDatabase {
         
         // Reconstruct payload from columns
         return result.rows.map(row => {
-          const payload = {};
+          const payload: MessageWithMetadata = {};
           
           if (includeMetadata) {
             payload._id = row.id;
@@ -394,7 +409,7 @@ class PostgreSQLDatabase {
           }
           
           for (const [fieldName, fieldType] of Object.entries(schema)) {
-            const columnName = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+            const columnName = fieldName.replace(/[^a-zA-Z0-9]/g, '_');
             let value = row[columnName];
             
             // Convert value back based on field type
@@ -418,7 +433,7 @@ class PostgreSQLDatabase {
         // Use generic messages table
         const selectColumns = includeMetadata ? 'id, received_at, payload' : 'payload';
         let query = `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at ${order.toUpperCase()}`;
-        let params = [topicName];
+        let params: any[] = [topicName];
         
         if (limit) {
           query += ` LIMIT $2 OFFSET $3`;
@@ -431,7 +446,7 @@ class PostgreSQLDatabase {
         const result = await client.query(query, params);
         
         return result.rows.map(row => {
-          const payload = row.payload;
+          const payload: MessageWithMetadata = row.payload;
           if (includeMetadata) {
             payload._id = row.id;
             payload._received_at = row.received_at;
@@ -440,7 +455,7 @@ class PostgreSQLDatabase {
         });
       }
     } catch (error) {
-      if (error.code === '42P01') { // Table doesn't exist
+      if (error instanceof Error && 'code' in error && error.code === '42P01') { // Table doesn't exist
         logger.warn(`Dedicated table doesn't exist for topic ${topicName}`);
         return [];
       }
@@ -450,7 +465,9 @@ class PostgreSQLDatabase {
     }
   }
 
-  async deleteTopic(topicName) {
+  async deleteTopic(topicName: string): Promise<void> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -482,7 +499,7 @@ class PostgreSQLDatabase {
     }
   }
 
-  close() {
+  close(): void {
     if (this.pool) {
       this.pool.end();
       logger.info('PostgreSQL database connection closed');
@@ -490,4 +507,4 @@ class PostgreSQLDatabase {
   }
 }
 
-module.exports = new PostgreSQLDatabase(); 
+export default new PostgreSQLDatabase(); 

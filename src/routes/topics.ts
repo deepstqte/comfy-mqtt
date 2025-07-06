@@ -1,49 +1,53 @@
-const express = require('express');
-const Joi = require('joi');
-const logger = require('../config/logger');
-const database = require('../config/database');
-const mqttService = require('../services/mqttService');
+import express, { Request, Response } from 'express';
+import Joi from 'joi';
+import { logger } from '../config/logger';
+import database from '../config/database';
+import mqttService from '../services/mqttService';
+import { CreateTopicRequest, PublishMessageRequest, ApiResponse } from '../types';
 
 const router = express.Router();
 
 // Validation schemas
-const topicSchema = Joi.object({
+const topicSchema = Joi.object<CreateTopicRequest>({
   name: Joi.string().required().min(1).max(255),
   schema: Joi.object().required(),
   useDedicatedTable: Joi.boolean().default(false)
 });
 
-const messageSchema = Joi.object({
+const messageSchema = Joi.object<PublishMessageRequest>({
   payload: Joi.object().required()
 });
 
 // Get all configured topics
-router.get('/', async (req, res) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const topics = await database.getTopics();
-    res.json({
+    const response: ApiResponse = {
       success: true,
       data: topics,
       count: topics.length
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error('Error getting topics:', error);
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to retrieve topics'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
 // Configure a new topic
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { error, value } = topicSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({
+      const response: ApiResponse = {
         success: false,
-        error: `Validation error: ${error.details[0].message}`
-      });
+        error: `Validation error: ${error.details[0]?.message || 'Unknown validation error'}`
+      };
+      return res.status(400).json(response);
     }
 
     const { name, schema, useDedicatedTable } = value;
@@ -55,45 +59,49 @@ router.post('/', async (req, res) => {
     await mqttService.subscribeToTopic(name, schema);
 
     logger.info(`Topic ${name} configured successfully`);
-    res.status(201).json({
+    const response: ApiResponse = {
       success: true,
       message: `Topic ${name} configured successfully`,
       data: { name, schema, useDedicatedTable }
-    });
+    };
+    res.status(201).json(response);
 
   } catch (error) {
     logger.error('Error configuring topic:', error);
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to configure topic'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
 // Get messages for a specific topic
-router.get('/*/messages', async (req, res) => {
+router.get('/*/messages', async (req: Request, res: Response) => {
   try {
-    const topicName = req.params[0]; // Use params[0] for wildcard routes
-    const limit = req.query.limit ? parseInt(req.query.limit) : null;
-    const offset = parseInt(req.query.offset) || 0;
-    const format = req.query.format || 'json'; // 'json' or 'csv'
-    const order = req.query.order || 'asc'; // 'asc' or 'desc'
+    const topicName = req.params[0] as string; // Use params[0] for wildcard routes
+    const limit = req.query['limit'] ? parseInt(req.query['limit'] as string) : null;
+    const offset = parseInt(req.query['offset'] as string) || 0;
+    const format = (req.query['format'] as string) || 'json'; // 'json' or 'csv'
+    const order = (req.query['order'] as string) || 'asc'; // 'asc' or 'desc'
     
     // Validate order parameter
     if (order !== 'asc' && order !== 'desc') {
-      return res.status(400).json({
+      const response: ApiResponse = {
         success: false,
         error: 'Order parameter must be "asc" or "desc"'
-      });
+      };
+      return res.status(400).json(response);
     }
 
     // Check if topic exists
     const topic = await database.getTopic(topicName);
     if (!topic) {
-      return res.status(404).json({
+      const response: ApiResponse = {
         success: false,
         error: `Topic ${topicName} not found`
-      });
+      };
+      return res.status(404).json(response);
     }
 
     const messages = await database.getMessages(topicName, limit, offset, format === 'csv', order);
@@ -121,10 +129,11 @@ router.get('/*/messages', async (req, res) => {
       } catch (csvError) {
         console.error('CSV generation error:', csvError);
         logger.error(`Error generating CSV for topic ${topicName}:`, csvError);
-        return res.status(500).json({
+        const response: ApiResponse = {
           success: false,
           error: 'Failed to generate CSV'
-        });
+        };
+        return res.status(500).json(response);
       }
     } else {
       // Return JSON response - just the data array
@@ -133,15 +142,16 @@ router.get('/*/messages', async (req, res) => {
 
   } catch (error) {
     logger.error(`Error getting messages for topic ${req.params[0]}:`, error);
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to retrieve messages'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
 // Helper function to generate CSV from messages
-function generateCSV(messages, schema, useDedicatedTable) {
+function generateCSV(messages: any[], schema: Record<string, any>, useDedicatedTable: boolean): string {
   console.log('Generating CSV with:', { messagesCount: messages.length, schema, useDedicatedTable });
   
   if (messages.length === 0) {
@@ -160,7 +170,7 @@ function generateCSV(messages, schema, useDedicatedTable) {
   // Add data rows
   messages.forEach((message, index) => {
     console.log(`Processing message ${index}:`, message);
-    const row = [];
+    const row: string[] = [];
     
     // Add id (from metadata)
     row.push(message._id || 'N/A');
@@ -200,70 +210,76 @@ function generateCSV(messages, schema, useDedicatedTable) {
 }
 
 // Publish message to a topic
-router.post('/*/publish', async (req, res) => {
+router.post('/*/publish', async (req: Request, res: Response) => {
   try {
-    const topicName = req.params[0]; // Use params[0] for wildcard routes
+    const topicName = req.params[0] as string; // Use params[0] for wildcard routes
     const { error, value } = messageSchema.validate(req.body);
     
     if (error) {
-      return res.status(400).json({
+      const response: ApiResponse = {
         success: false,
-        error: `Validation error: ${error.details[0].message}`
-      });
+        error: `Validation error: ${error.details[0]?.message || 'Unknown validation error'}`
+      };
+      return res.status(400).json(response);
     }
 
     const { payload } = value;
 
     // Check if topic is configured
     if (!mqttService.isTopicSubscribed(topicName)) {
-      return res.status(404).json({
+      const response: ApiResponse = {
         success: false,
         error: `Topic ${topicName} is not configured`
-      });
+      };
+      return res.status(404).json(response);
     }
 
     // Publish message to MQTT topic
     await mqttService.publishMessage(topicName, payload);
 
-    res.json({
+    const response: ApiResponse = {
       success: true,
       message: `Message published to topic ${topicName}`,
       data: { topic: topicName, payload }
-    });
+    };
+    res.json(response);
 
   } catch (error) {
     logger.error(`Error publishing message to topic ${req.params[0]}:`, error);
     
-    if (error.message.includes('Payload validation failed')) {
-      return res.status(400).json({
+    if (error instanceof Error && error.message.includes('Payload validation failed')) {
+      const response: ApiResponse = {
         success: false,
         error: error.message
-      });
+      };
+      return res.status(400).json(response);
     }
 
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to publish message'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
 // Get topic information (must come before the wildcard delete route)
-router.get('/*', async (req, res) => {
+router.get('/*', async (req: Request, res: Response) => {
   try {
-    const topicName = req.params[0]; // Use params[0] for wildcard routes
+    const topicName = req.params[0] as string; // Use params[0] for wildcard routes
     const topic = await database.getTopic(topicName);
     
     if (!topic) {
-      return res.status(404).json({
+      const response: ApiResponse = {
         success: false,
         error: `Topic ${topicName} not found`
-      });
+      };
+      return res.status(404).json(response);
     }
 
     const isSubscribed = mqttService.isTopicSubscribed(topicName);
 
-    res.json({
+    const response: ApiResponse = {
       success: true,
       data: {
         name: topicName,
@@ -272,52 +288,55 @@ router.get('/*', async (req, res) => {
         isSubscribed,
         mqttConnected: mqttService.isConnected
       }
-    });
+    };
+    res.json(response);
 
   } catch (error) {
     logger.error(`Error getting topic info for ${req.params[0]}:`, error);
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to retrieve topic information'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
 // Delete a topic (must be last to avoid conflicts)
-router.delete('/*', async (req, res) => {
+router.delete('/*', async (req: Request, res: Response) => {
   try {
-    const topicName = req.params[0]; // Use params[0] for wildcard routes
+    const topicName = req.params[0] as string; // Use params[0] for wildcard routes
 
     // Check if topic exists
-    const schema = await database.getTopicSchema(topicName);
-    if (!schema) {
-      return res.status(404).json({
+    const topic = await database.getTopic(topicName);
+    if (!topic) {
+      const response: ApiResponse = {
         success: false,
         error: `Topic ${topicName} not found`
-      });
+      };
+      return res.status(404).json(response);
     }
 
     // Unsubscribe from MQTT topic
-    if (mqttService.isTopicSubscribed(topicName)) {
-      await mqttService.unsubscribeFromTopic(topicName);
-    }
+    await mqttService.unsubscribeFromTopic(topicName);
 
     // Delete topic from database
     await database.deleteTopic(topicName);
 
     logger.info(`Topic ${topicName} deleted successfully`);
-    res.json({
+    const response: ApiResponse = {
       success: true,
       message: `Topic ${topicName} deleted successfully`
-    });
+    };
+    res.json(response);
 
   } catch (error) {
     logger.error(`Error deleting topic ${req.params[0]}:`, error);
-    res.status(500).json({
+    const response: ApiResponse = {
       success: false,
       error: 'Failed to delete topic'
-    });
+    };
+    res.status(500).json(response);
   }
 });
 
-module.exports = router; 
+export default router; 

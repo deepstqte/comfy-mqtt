@@ -2,13 +2,15 @@
   "name": "comfy-mqtt",
   "version": "1.0.0",
   "description": "A REST API layer on top of MQTT with database storage and payload validation",
-  "main": "src/server.js",
+  "main": "dist/app.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "test": "jest"
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean"
   },
-  "keywords": ["mqtt", "rest", "api", "database", "websocket"],
+  "keywords": ["mqtt", "rest", "api", "postgresql", "iot"],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -16,13 +18,17 @@
     "mqtt": "^5.3.5",
     "pg": "^8.11.3",
     "joi": "^17.11.0",
-    "cors": "^2.8.5",
+    "winston": "^3.11.0",
     "helmet": "^7.1.0",
-    "dotenv": "^16.3.1",
-    "winston": "^3.11.0"
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.2",
+    "ts-node-dev": "^2.0.0"
   }
 } 
