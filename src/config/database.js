@@ -108,7 +108,7 @@ class PostgreSQLDatabase {
       // Create index for better performance
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_${tableName}_received 
-        ON ${tableName}(received_at DESC)
+        ON ${tableName}(received_at ASC)
       `);
       
       logger.info(`Table ${tableName} created for topic ${topicName} with schema-based columns`);
@@ -333,7 +333,7 @@ class PostgreSQLDatabase {
     }
   }
 
-  async getMessages(topicName, limit = 100, offset = 0, includeMetadata = false) {
+  async getMessages(topicName, limit = 100, offset = 0, includeMetadata = false, order = 'asc') {
     const client = await this.pool.connect();
     try {
       // Check if topic uses dedicated table
@@ -372,7 +372,7 @@ class PostgreSQLDatabase {
           : columns.join(', ');
         
         const result = await client.query(
-          `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at DESC LIMIT $1 OFFSET $2`,
+          `SELECT ${selectColumns} FROM ${tableName} ORDER BY received_at ${order.toUpperCase()} LIMIT $1 OFFSET $2`,
           [limit, offset]
         );
         
@@ -410,7 +410,7 @@ class PostgreSQLDatabase {
         // Use generic messages table
         const selectColumns = includeMetadata ? 'id, received_at, payload' : 'payload';
         const result = await client.query(
-          `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at DESC LIMIT $2 OFFSET $3`,
+          `SELECT ${selectColumns} FROM messages WHERE topic_name = $1 ORDER BY received_at ${order.toUpperCase()} LIMIT $2 OFFSET $3`,
           [topicName, limit, offset]
         );
         

@@ -74,8 +74,8 @@ Examples:
 ### Indexes
 
 - `idx_topics_name` - Optimizes topic name lookups
-- `idx_messages_topic_received` - Optimizes queries for shared messages
-- Individual topic tables get their own indexes for `received_at DESC`
+- `idx_messages_topic_received` - Optimizes queries for shared messages (chronological order)
+- Individual topic tables get their own indexes for `received_at ASC` (chronological order)
 
 ## Automatic Setup
 

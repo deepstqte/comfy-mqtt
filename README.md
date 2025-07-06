@@ -150,9 +150,23 @@ Response:
 }
 ```
 
+**Note:** Messages are returned in chronological order by default (oldest first). Use `order=desc` to get newest first.
+
 #### Download messages as CSV
 ```http
 GET /api/topics/sensor/temperature/messages?format=csv&limit=100
+```
+
+**Ordering Examples:**
+```http
+# Oldest first (default)
+GET /api/topics/sensor/temperature/messages?order=asc
+
+# Newest first
+GET /api/topics/sensor/temperature/messages?order=desc
+
+# CSV with newest first
+GET /api/topics/sensor/temperature/messages?format=csv&order=desc
 ```
 
 This will download a CSV file with the following columns:
@@ -164,6 +178,7 @@ This will download a CSV file with the following columns:
 - `format`: `json` (default) or `csv`
 - `limit`: Number of records to retrieve (default: 100)
 - `offset`: Number of records to skip (default: 0)
+- `order`: `asc` (default) or `desc` - chronological ordering
 
 **Example CSV Output:**
 ```csv
@@ -171,6 +186,8 @@ id,received_at,temperature,humidity,timestamp
 1,2024-01-01T12:00:00.000Z,25.5,60.2,2024-01-01T12:00:00.000Z
 2,2024-01-01T12:05:00.000Z,26.0,58.5,2024-01-01T12:05:00.000Z
 ```
+
+**Note:** CSV data is ordered chronologically by default (oldest first). Use `order=desc` to get newest first.
 
 #### Publish message to a topic
 ```http

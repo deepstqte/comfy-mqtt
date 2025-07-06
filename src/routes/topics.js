@@ -77,6 +77,15 @@ router.get('/*/messages', async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const offset = parseInt(req.query.offset) || 0;
     const format = req.query.format || 'json'; // 'json' or 'csv'
+    const order = req.query.order || 'asc'; // 'asc' or 'desc'
+    
+    // Validate order parameter
+    if (order !== 'asc' && order !== 'desc') {
+      return res.status(400).json({
+        success: false,
+        error: 'Order parameter must be "asc" or "desc"'
+      });
+    }
 
     // Check if topic exists
     const topic = await database.getTopic(topicName);
@@ -87,7 +96,7 @@ router.get('/*/messages', async (req, res) => {
       });
     }
 
-    const messages = await database.getMessages(topicName, limit, offset, format === 'csv');
+    const messages = await database.getMessages(topicName, limit, offset, format === 'csv', order);
     
     if (format === 'csv') {
       try {

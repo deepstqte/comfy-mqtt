@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_topics_name
 ON topics(name);
 
 CREATE INDEX IF NOT EXISTS idx_messages_topic_received 
-ON messages(topic_name, received_at DESC);
+ON messages(topic_name, received_at ASC);
 
 -- Add comments for documentation
 COMMENT ON TABLE topics IS 'Stores MQTT topic configurations and their validation schemas';
