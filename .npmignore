@@ -1,0 +1,54 @@
+# Source files
+src/
+*.ts
+*.tsx
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+data/
+mosquitto/
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Scripts
+scripts/
+test-example.js
+
+# TypeScript
+tsconfig.json
+*.tsbuildinfo 
