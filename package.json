@@ -1,13 +1,13 @@
 {
   "name": "comfy-mqtt",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "description": "A REST API layer on top of MQTT with database storage and payload validation",
   "main": "dist/app.js",
   "bin": {
     "comfy-mqtt": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli.js",
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "clean": "rm -rf dist",
@@ -59,10 +59,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/comfy-mqtt.git"
+    "url": "git+https://github.com/deepstqte/comfy-mqtt.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/comfy-mqtt/issues"
+    "url": "https://github.com/deepstqte/comfy-mqtt/issues"
   },
-  "homepage": "https://github.com/yourusername/comfy-mqtt#readme"
+  "homepage": "https://github.com/deepstqte/comfy-mqtt#readme"
 }

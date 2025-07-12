@@ -2,6 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
@@ -22,12 +23,16 @@ interface SetupConfig {
   dbPassword: string;
 }
 
-async function checkEnvFile(): Promise<boolean> {
-  const envPath = path.join(process.cwd(), '.env');
-  return fs.existsSync(envPath);
+function getConfigPath(): string {
+  return path.join(os.homedir(), '.comfy-mqtt');
 }
 
-async function createEnvFile(config: SetupConfig): Promise<void> {
+async function checkConfigFile(): Promise<boolean> {
+  const configPath = getConfigPath();
+  return fs.existsSync(configPath);
+}
+
+async function createConfigFile(config: SetupConfig): Promise<void> {
   const envContent = `# Server Configuration
 PORT=${config.port}
 NODE_ENV=${config.nodeEnv}
@@ -48,9 +53,9 @@ DB_USER=${config.dbUser}
 DB_PASSWORD=${config.dbPassword}
 `;
 
-  const envPath = path.join(process.cwd(), '.env');
-  fs.writeFileSync(envPath, envContent);
-  console.log(chalk.green('✓ .env file created successfully'));
+  const configPath = getConfigPath();
+  fs.writeFileSync(configPath, envContent);
+  console.log(chalk.green(`✓ Configuration saved to ${configPath}`));
 }
 
 async function promptForConfiguration(): Promise<SetupConfig> {
@@ -193,8 +198,14 @@ async function showSummary(config: SetupConfig): Promise<boolean> {
 async function startServer(): Promise<void> {
   console.log(chalk.blue('\n🚀 Starting Comfy MQTT server...'));
   
-  // Load environment variables
-  dotenv.config();
+  // Load environment variables from the config file
+  const configPath = getConfigPath();
+  const result = dotenv.config({ path: configPath });
+  
+  if (result.error) {
+    console.error(chalk.red('Error loading configuration:'), result.error);
+    process.exit(1);
+  }
   
   // Import and start the server
   const app = await import('./app');
@@ -210,23 +221,24 @@ async function startServer(): Promise<void> {
 
 async function main(): Promise<void> {
   try {
-    const hasEnvFile = await checkEnvFile();
+    const hasConfigFile = await checkConfigFile();
     
-    if (!hasEnvFile) {
-      console.log(chalk.yellow('⚠️  No .env file found. Starting setup...\n'));
+    if (!hasConfigFile) {
+      console.log(chalk.yellow('⚠️  No configuration found. Starting setup...\n'));
+      console.log(chalk.gray(`Configuration will be saved to: ${getConfigPath()}\n`));
       
       const config = await promptForConfiguration();
       const confirmed = await showSummary(config);
       
       if (confirmed) {
-        await createEnvFile(config);
+        await createConfigFile(config);
         console.log(chalk.green('\n✅ Setup completed successfully!'));
       } else {
         console.log(chalk.yellow('\n❌ Setup cancelled. Please run the command again to retry.'));
         process.exit(0);
       }
     } else {
-      console.log(chalk.green('✓ .env file found'));
+      console.log(chalk.green('✓ Configuration found'));
     }
     
     await startServer();

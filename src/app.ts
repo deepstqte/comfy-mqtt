@@ -2,14 +2,23 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
+import os from 'os';
 import { logger } from './config/logger';
 import database from './config/database';
 import mqttService from './services/mqttService';
 import topicsRouter from './routes/topics';
 import healthRouter from './routes/health';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from ~/.comfy-mqtt
+const configPath = path.join(os.homedir(), '.comfy-mqtt');
+const result = dotenv.config({ path: configPath });
+
+if (result.error) {
+  console.error('Error loading configuration from ~/.comfy-mqtt:', result.error);
+  console.error('Please run the setup again with: comfy-mqtt');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env['PORT'] || 3000;
