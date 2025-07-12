@@ -2,52 +2,85 @@
 
 A REST API layer on top of MQTT with database storage and payload validation. This service allows you to configure MQTT topics with specific payload schemas, automatically stores received messages, and provides REST endpoints to retrieve and publish messages.
 
+## Installation
+
+### Global Installation (Recommended)
+
+Install the package globally to use it as a CLI tool:
+
+```bash
+npm install -g comfy-mqtt
+```
+
+After installation, you can start the server from any directory:
+
+```bash
+comfy-mqtt
+```
+
+The first time you run the command, it will prompt you to configure your MQTT broker and PostgreSQL database settings, then create a `.env` file for future use.
+
+### Local Installation
+
+For development or local use:
+
+```bash
+npm install comfy-mqtt
+```
+
+Then run:
+
+```bash
+npm start
+```
+
 ## Features
 
 - **MQTT Integration**: Subscribe to multiple MQTT topics and handle incoming messages
-- **Database Storage**: Automatically store received messages in SQLite database with topic-specific tables
+- **Database Storage**: Automatically store received messages in PostgreSQL database with topic-specific tables
 - **Payload Validation**: Validate incoming and outgoing messages against Joi schemas
 - **REST API**: Full REST API for topic management and message handling
 - **Health Monitoring**: Built-in health check endpoints
 - **Logging**: Comprehensive logging with Winston
 - **Graceful Shutdown**: Proper cleanup on server shutdown
+- **Interactive Setup**: Automatic configuration wizard for first-time setup
+
+## First-Time Setup
+
+When you run `comfy-mqtt` for the first time, you'll be prompted to configure:
+
+### Server Configuration
+- **Port**: HTTP server port (default: 3000)
+- **Environment**: Development or production mode
+- **Log Level**: Error, warn, info, or debug
+
+### MQTT Broker Configuration
+- **Host**: MQTT broker hostname or IP
+- **Port**: MQTT broker port (default: 1883)
+- **Username**: MQTT username (optional)
+- **Password**: MQTT password (optional)
+- **Client ID**: MQTT client identifier
+
+### PostgreSQL Database Configuration
+- **Host**: PostgreSQL server hostname or IP
+- **Port**: PostgreSQL port (default: 5432)
+- **Database Name**: Database name for storing messages
+- **Username**: PostgreSQL username
+- **Password**: PostgreSQL password
+
+After configuration, a `.env` file will be created in the current directory with your settings.
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
 - MQTT Broker (e.g., Mosquitto, HiveMQ, AWS IoT)
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd comfy-mqtt
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Copy the environment file and configure it:
-```bash
-cp env.example .env
-```
-
-4. Edit `.env` file with your MQTT broker configuration:
-```env
-MQTT_HOST=your-mqtt-broker-host
-MQTT_PORT=1883
-MQTT_USERNAME=your-username
-MQTT_PASSWORD=your-password
-```
+- PostgreSQL database
 
 ## Usage
 
 ### Start the server:
 ```bash
-npm start
+comfy-mqtt
 ```
 
 ### Development mode with auto-restart:
@@ -457,6 +490,11 @@ In development mode, logs are also output to the console.
 | `MQTT_USERNAME` | MQTT username | - |
 | `MQTT_PASSWORD` | MQTT password | - |
 | `MQTT_CLIENT_ID` | MQTT client ID | comfy-mqtt-{timestamp} |
+| `DB_HOST` | PostgreSQL host | localhost |
+| `DB_PORT` | PostgreSQL port | 5432 |
+| `DB_NAME` | PostgreSQL database name | comfy_mqtt |
+| `DB_USER` | PostgreSQL username | comfy_mqtt |
+| `DB_PASSWORD` | PostgreSQL password | - |
 
 ## Error Handling
 
