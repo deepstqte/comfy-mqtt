@@ -1,6 +1,6 @@
 {
   "name": "comfy-mqtt",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A REST API layer on top of MQTT with database storage and payload validation",
   "main": "dist/app.js",
   "bin": {
