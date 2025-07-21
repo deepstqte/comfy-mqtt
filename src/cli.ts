@@ -21,6 +21,7 @@ interface SetupConfig {
   dbName: string;
   dbUser: string;
   dbPassword: string;
+  maxDbTableSize: string;
 }
 
 function getConfigPath(): string {
@@ -51,6 +52,9 @@ DB_PORT=${config.dbPort}
 DB_NAME=${config.dbName}
 DB_USER=${config.dbUser}
 DB_PASSWORD=${config.dbPassword}
+
+# Retention Configuration
+MAX_DB_TABLE_SIZE=${config.maxDbTableSize}
 `;
 
   const configPath = getConfigPath();
@@ -158,6 +162,16 @@ async function promptForConfiguration(): Promise<SetupConfig> {
       name: 'dbPassword',
       message: 'PostgreSQL password:',
       validate: (input: string) => input.trim() ? true : 'Database password is required'
+    },
+    {
+      type: 'input',
+      name: 'maxDbTableSize',
+      message: 'Max DB table size in KB for retention (default: 100MB):',
+      default: '102400',
+      validate: (input: string) => {
+        const val = parseInt(input);
+        return val > 0 ? true : 'Please enter a positive number';
+      }
     }
   ]);
 
@@ -167,22 +181,25 @@ async function promptForConfiguration(): Promise<SetupConfig> {
 async function showSummary(config: SetupConfig): Promise<boolean> {
   console.log(chalk.blue('\n📋 Configuration Summary:'));
   console.log(chalk.gray('─'.repeat(50)));
-  
+
   console.log(chalk.cyan('Server:'));
   console.log(`  Port: ${config.port}`);
   console.log(`  Environment: ${config.nodeEnv}`);
   console.log(`  Log Level: ${config.logLevel}`);
-  
+
   console.log(chalk.cyan('\nMQTT Broker:'));
   console.log(`  Host: ${config.mqttHost}:${config.mqttPort}`);
   console.log(`  Username: ${config.mqttUsername || 'Not set'}`);
   console.log(`  Client ID: ${config.mqttClientId}`);
-  
+
   console.log(chalk.cyan('\nPostgreSQL Database:'));
   console.log(`  Host: ${config.dbHost}:${config.dbPort}`);
   console.log(`  Database: ${config.dbName}`);
   console.log(`  Username: ${config.dbUser}`);
-  
+
+  console.log(chalk.cyan('\nRetention:'));
+  console.log(`  Max DB Table Size: ${config.maxDbTableSize} KB`);
+
   const { confirm } = await inquirer.prompt([
     {
       type: 'confirm',

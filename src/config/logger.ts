@@ -21,9 +21,9 @@ const levels = {
 const colors = {
   error: 'red',
   warn: 'yellow',
-  info: 'green',
+  info: 'white',
   http: 'magenta',
-  debug: 'white',
+  debug: 'green',
 };
 
 // Tell winston that you want to link the colors

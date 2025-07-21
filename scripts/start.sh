@@ -16,16 +16,20 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Check if ~/.comfy-mqtt config file exists
+CONFIG_FILE="$HOME/.comfy-mqtt"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Configuration file not found at $CONFIG_FILE"
+    echo "⚠️  Please run the setup first with: comfy-mqtt"
+    echo "   Or create the config file manually with your settings"
+    exit 1
+fi
+
+echo "✅ Found configuration file: $CONFIG_FILE"
+
 # Create necessary directories
 echo "📁 Creating directories..."
 mkdir -p data logs mosquitto/config mosquitto/data mosquitto/log
-
-# Copy environment file if it doesn't exist
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file from template..."
-    cp env.example .env
-    echo "⚠️  Please edit .env file with your MQTT broker configuration"
-fi
 
 # Install dependencies
 echo "📦 Installing dependencies..."
@@ -50,13 +54,17 @@ read -p "Enter your choice (1-3): " choice
 case $choice in
     1)
         echo "🐳 Starting with Docker..."
+        # Export environment variables from ~/.comfy-mqtt for docker-compose
+        export $(grep -v '^#' "$CONFIG_FILE" | xargs)
         docker-compose up -d
         echo "✅ Services started! API available at http://localhost:3000"
         echo "📊 Health check: http://localhost:3000/api/health"
         ;;
     2)
         echo "💻 Starting locally..."
-        echo "⚠️  Make sure your MQTT broker is running and configured in .env"
+        echo "⚠️  Make sure your MQTT broker is running and configured in $CONFIG_FILE"
+        export $(grep -v '^#' "$CONFIG_FILE" | xargs)
+        # The app will automatically load from ~/.comfy-mqtt
         npm start
         ;;
     3)

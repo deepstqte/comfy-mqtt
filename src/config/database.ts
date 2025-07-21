@@ -12,6 +12,12 @@ function getTopicTableName(topicName: string): string {
 
 class PostgreSQLDatabase implements DatabaseService {
   private pool: Pool | null = null;
+  private maxTableSizeKB: number;
+
+  constructor() {
+    // Get max table size from environment (default to 100MB if not specified)
+    this.maxTableSizeKB = parseInt(process.env['MAX_DB_TABLE_SIZE'] || '102400');
+  }
 
   async initialize(): Promise<void> {
     try {
@@ -255,6 +261,12 @@ class PostgreSQLDatabase implements DatabaseService {
           values
         );
         
+        // Manage retention after successful insert
+        const deletedRows = await this.manageTableRetention(tableName);
+        if (deletedRows > 0) {
+          logger.info(`Retention: ${deletedRows} old rows deleted from ${tableName}`);
+        }
+        
         logger.info(`Message stored for topic ${topicName} with ID ${result.rows[0].id} (dedicated table)`);
         return result.rows[0].id;
       } else {
@@ -263,6 +275,12 @@ class PostgreSQLDatabase implements DatabaseService {
           'INSERT INTO messages (topic_name, payload) VALUES ($1, $2) RETURNING id',
           [topicName, JSON.stringify(payload)]
         );
+        
+        // Manage retention after successful insert
+        const deletedRows = await this.manageTableRetention('messages');
+        if (deletedRows > 0) {
+          logger.info(`Retention: ${deletedRows} old rows deleted from messages table`);
+        }
         
         logger.info(`Message stored for topic ${topicName} with ID ${result.rows[0].id} (generic table)`);
         return result.rows[0].id;
@@ -290,6 +308,12 @@ class PostgreSQLDatabase implements DatabaseService {
           `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`,
           values
         );
+        
+        // Manage retention after successful insert
+        const deletedRows = await this.manageTableRetention(tableName);
+        if (deletedRows > 0) {
+          logger.info(`Retention: ${deletedRows} old rows deleted from ${tableName}`);
+        }
         
         logger.info(`Message stored for topic ${topicName} with ID ${result.rows[0].id}`);
         return result.rows[0].id;
@@ -494,6 +518,93 @@ class PostgreSQLDatabase implements DatabaseService {
       } else {
         logger.info(`Topic ${topicName} deleted successfully (messages cleaned up via cascade)`);
       }
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Manages table retention by checking size and removing old rows if needed
+   * @param tableName The name of the table to check
+   * @returns Number of rows deleted (0 if no action taken)
+   */
+  async manageTableRetention(tableName: string): Promise<number> {
+    if (!this.pool) throw new Error('Database not initialized');
+    
+    const client = await this.pool.connect();
+    try {
+      // Check current table size
+      const sizeResult = await client.query(
+        "SELECT pg_total_relation_size($1) AS total_size_bytes",
+        [tableName]
+      );
+
+      if (sizeResult.rows.length === 0) {
+        logger.warn(`Table ${tableName} not found for retention check`);
+        return 0;
+      }
+      
+      const currentSizeBytes = parseInt(sizeResult.rows[0].total_size_bytes);
+      const currentSizeKB = currentSizeBytes / 1024;
+      
+      logger.debug(`Table ${tableName} current size: ${currentSizeKB.toFixed(2)} KB (max: ${this.maxTableSizeKB} KB)`);
+      
+      // If table is under the limit, no action needed
+      if (currentSizeKB <= this.maxTableSizeKB) {
+        return 0;
+      }
+      
+      // Get row count to calculate average row size
+      const countResult = await client.query(
+        `SELECT COUNT(*) as row_count FROM ${tableName}`
+      );
+      
+      const rowCount = parseInt(countResult.rows[0].row_count);
+      if (rowCount === 0) {
+        return 0;
+      }
+      
+      // Calculate average row size and how many rows to remove
+      const averageRowSizeKB = currentSizeKB / rowCount;
+      const targetSizeKB = this.maxTableSizeKB * 0.8; // 80% of max size
+      const excessSizeKB = currentSizeKB - targetSizeKB;
+      const rowsToDelete = Math.ceil(excessSizeKB / averageRowSizeKB);
+      
+      if (rowsToDelete <= 0) {
+        return 0;
+      }
+      
+      // Delete oldest rows (assuming they have an id or timestamp column)
+      const deleteResult = await client.query(
+        `DELETE FROM ${tableName} WHERE id IN (
+          SELECT id FROM ${tableName} 
+          ORDER BY received_at ASC, id ASC 
+          LIMIT $1
+        )`,
+        [rowsToDelete]
+      );
+      
+      const deletedRows = deleteResult.rowCount || 0;
+      
+      if (deletedRows > 0) {
+        logger.info(`Retention: Deleted ${deletedRows} rows from ${tableName} to maintain size limit`);
+        
+        // Run VACUUM FULL to reclaim space and update statistics
+        try {
+          logger.debug(`Running VACUUM FULL on ${tableName} to reclaim space...`);
+          await client.query(`VACUUM FULL ${tableName}`);
+          logger.info(`VACUUM FULL completed for ${tableName}`);
+        } catch (vacuumError) {
+          logger.warn(`VACUUM FULL failed for ${tableName}:`, vacuumError);
+          // Don't fail the retention process if VACUUM fails
+        }
+      }
+      
+      return deletedRows;
+      
+    } catch (error) {
+      logger.error(`Error managing retention for table ${tableName}:`, error);
+      return 0;
     } finally {
       client.release();
     }
