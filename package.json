@@ -15,8 +15,8 @@
     "test": "echo \"No tests specified\" && exit 0",
     "lint": "echo \"No linting configured\" && exit 0",
     "prepublishOnly": "npm run build",
-    "version": "npm run build && git add -A dist",
-    "postversion": "git push && git push --tags"
+    "version": "npm run build",
+    "postversion": "echo 'Version updated'"
   },
   "keywords": [
     "mqtt",
