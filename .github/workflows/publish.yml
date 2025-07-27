@@ -38,12 +38,19 @@ jobs:
           npm version $NEW_VERSION --no-git-tag-version
           echo "Published version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-        
+
       - name: Publish to NPM
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          
+
+      - name: Create git tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag ${{ env.NEW_VERSION }}
+          git push origin ${{ env.NEW_VERSION }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
