@@ -2,8 +2,7 @@ name: Publish to NPM
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main ]
 
 jobs:
   publish:
@@ -12,6 +11,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
         
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,6 +26,19 @@ jobs:
       - name: Build project
         run: npm run build
         
+      - name: Update version with commit hash
+        run: |
+          # Get the current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          # Get the first 6 characters of the commit hash
+          COMMIT_HASH=$(git rev-parse --short=6 HEAD)
+          # Create new version with commit hash
+          NEW_VERSION="${CURRENT_VERSION}-${COMMIT_HASH}"
+          # Update package.json with new version
+          npm version $NEW_VERSION --no-git-tag-version
+          echo "Published version: $NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+        
       - name: Publish to NPM
         run: npm publish
         env:
@@ -34,5 +48,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
+          tag_name: ${{ env.NEW_VERSION }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
