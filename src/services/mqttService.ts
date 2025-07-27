@@ -2,6 +2,7 @@ import mqtt from 'mqtt';
 import Joi from 'joi';
 import { logger } from '../config/logger';
 import { MqttService, MqttConfig, MqttMessage } from '../types';
+import database from '../config/database.js';
 
 class MqttServiceImpl implements MqttService {
   private client: ReturnType<typeof mqtt.connect> | null = null;
@@ -175,6 +176,7 @@ class MqttServiceImpl implements MqttService {
         const { error } = schema.validate(payload);
         if (error) {
           logger.error(`Invalid payload received on topic ${topic}:`, error.details[0].message);
+          logger.error(error.details[0].message);
           return;
         }
       }
@@ -188,7 +190,6 @@ class MqttServiceImpl implements MqttService {
 
   private async storeMessageInDatabase(topic: string, payload: Record<string, any>): Promise<void> {
     try {
-      const database = (await import('../config/database')).default;
       await database.storeMessage(topic, payload);
     } catch (error) {
       logger.error(`Error storing message in database for topic ${topic}:`, error);
@@ -202,7 +203,7 @@ class MqttServiceImpl implements MqttService {
       if (typeof fieldType === 'string') {
         switch (fieldType.toLowerCase()) {
           case 'string':
-            joiSchema[fieldName] = Joi.string();
+            joiSchema[fieldName] = Joi.string().allow('');
             break;
           case 'number':
           case 'integer':

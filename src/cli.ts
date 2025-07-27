@@ -3,8 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import inquirer from 'inquirer';
-import chalk from 'chalk';
 import dotenv from 'dotenv';
 
 interface SetupConfig {
@@ -24,6 +22,14 @@ interface SetupConfig {
   maxDbTableSize: string;
 }
 
+let inquirer: any;
+let chalk: any;
+
+async function loadDeps() {
+  inquirer = (await import('inquirer')).default;
+  chalk = (await import('chalk')).default;
+}
+
 function getConfigPath(): string {
   return path.join(os.homedir(), '.comfy-mqtt');
 }
@@ -34,28 +40,7 @@ async function checkConfigFile(): Promise<boolean> {
 }
 
 async function createConfigFile(config: SetupConfig): Promise<void> {
-  const envContent = `# Server Configuration
-PORT=${config.port}
-NODE_ENV=${config.nodeEnv}
-LOG_LEVEL=${config.logLevel}
-
-# MQTT Broker Configuration
-MQTT_HOST=${config.mqttHost}
-MQTT_PORT=${config.mqttPort}
-MQTT_USERNAME=${config.mqttUsername}
-MQTT_PASSWORD=${config.mqttPassword}
-MQTT_CLIENT_ID=${config.mqttClientId}
-
-# Database Configuration
-DB_HOST=${config.dbHost}
-DB_PORT=${config.dbPort}
-DB_NAME=${config.dbName}
-DB_USER=${config.dbUser}
-DB_PASSWORD=${config.dbPassword}
-
-# Retention Configuration
-MAX_DB_TABLE_SIZE=${config.maxDbTableSize}
-`;
+  const envContent = `# Server Configuration\nPORT=${config.port}\nNODE_ENV=${config.nodeEnv}\nLOG_LEVEL=${config.logLevel}\n\n# MQTT Broker Configuration\nMQTT_HOST=${config.mqttHost}\nMQTT_PORT=${config.mqttPort}\nMQTT_USERNAME=${config.mqttUsername}\nMQTT_PASSWORD=${config.mqttPassword}\nMQTT_CLIENT_ID=${config.mqttClientId}\n\n# Database Configuration\nDB_HOST=${config.dbHost}\nDB_PORT=${config.dbPort}\nDB_NAME=${config.dbName}\nDB_USER=${config.dbUser}\nDB_PASSWORD=${config.dbPassword}\n\n# Retention Configuration\nMAX_DB_TABLE_SIZE=${config.maxDbTableSize}\n`;
 
   const configPath = getConfigPath();
   fs.writeFileSync(configPath, envContent);
@@ -225,7 +210,7 @@ async function startServer(): Promise<void> {
   }
   
   // Import and start the server
-  const app = await import('./app');
+  const app = await import('./app.js');
   
   try {
     // The app will start automatically when imported
@@ -237,6 +222,7 @@ async function startServer(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  await loadDeps();
   try {
     const hasConfigFile = await checkConfigFile();
     
@@ -267,7 +253,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(chalk.red('Fatal error:'), error);
+    console.error('Fatal error:', error);
     process.exit(1);
   });
 } 
